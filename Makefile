@@ -3,8 +3,13 @@ CXX=clang++
 LLVM_CONFIG=llvm-config
 export
 
-all:
+all: main find-static
+
+main: main.cpp
 	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions main.cpp -o ./main
+
+find-static: find-static.cpp
+	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions find-static.cpp -o ./find-static
 
 bitcode: file.c
 	$(CC) -c -emit-llvm file.c
