@@ -11,6 +11,9 @@ main: main.cpp
 find-static: find-static.cpp
 	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions find-static.cpp -o ./find-static
 
+split: split.cpp
+	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions split.cpp -o ./split
+
 bitcode: file.c
 	$(CC) -c -emit-llvm file.c
 	./main file.bc
