@@ -107,6 +107,12 @@ int main(int argc, char **argv) {
   std::unordered_map<const llvm::Function *, std::set<llvm::GlobalVariable *>>
       users;
 
+
+  char* extractProgram = "llvm-extract";
+  if(auto extractProgramOverride = std::getenv("LLVM_EXTRACT")) {
+	extractProgram = extractProgramOverride;
+  }
+
   for (auto &function : loadedModule->functions()) {
     if (function.isDeclaration()) {
       continue;
@@ -116,15 +122,16 @@ int main(int argc, char **argv) {
 
     llvm::outs() << "# " << function.getName() << "\n";
     std::stringstream command;
-    command << "llvm-extract " << loadedModule->getName().str()
+    command << extractProgram << " " << loadedModule->getName().str()
             << " --func=" << function.getName().str() << " ";
 
     for (auto const &use : pass.globals) {
       command << "--glob=" << use->getName().str() << " ";
     }
     command << "-o " << outputDirectory << "/" << function.getName().str()
-            << ".bc &\n\n";
-    std::cout << command.str();
+            << ".bc "; 
+
+    std::cout << command.str() << "\n\n";
 
     if (!dry) {
       system(command.str().c_str());
@@ -133,11 +140,12 @@ int main(int argc, char **argv) {
 
   for (auto &globalVariable : toSplit) {
     std::stringstream command;
-    command << "llvm-extract " << loadedModule->getName().str()
+    command << extractProgram << " " << loadedModule->getName().str()
             << " --glob=" << globalVariable->getName().str() << " "
             << "-o " << outputDirectory << "/"
-            << globalVariable->getName().str() << ".bc &\n\n";
-    std::cout << command.str();
+            << globalVariable->getName().str() << ".bc ";
+
+    std::cout << command.str() << "\n\n";
 
     if (!dry) {
       system(command.str().c_str());
