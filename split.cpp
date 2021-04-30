@@ -57,6 +57,8 @@ llvm::cl::opt<bool> dry("d",
 
 llvm::cl::opt<bool> verbose("v", llvm::cl::desc("Enable vrbose output."));
 
+std::set<llvm::GlobalValue *> toSplit;
+
 struct MyPass : public llvm::InstVisitor<MyPass> {
   std::unordered_set<llvm::GlobalVariable *> globals;
 
@@ -75,7 +77,11 @@ struct MyPass : public llvm::InstVisitor<MyPass> {
         // TODO: ignore null's for now.
       } else if (auto globalVariable =
                      llvm::dyn_cast<llvm::GlobalVariable>(currentOperand)) {
-        globals.insert(globalVariable);
+        if (globalVariable->isConstant()) {
+          globals.insert(globalVariable);
+        } else {
+          toSplit.insert(globalVariable);
+        }
       } else if (auto user = llvm::dyn_cast<llvm::User>(currentOperand)) {
         for (uint32_t i = 0; i < user->getNumOperands(); i++) {
           auto nextOperand = user->getOperand(i);
@@ -101,6 +107,12 @@ int main(int argc, char **argv) {
   std::unordered_map<const llvm::Function *, std::set<llvm::GlobalVariable *>>
       users;
 
+
+  char* extractProgram = "llvm-extract";
+  if(auto extractProgramOverride = std::getenv("LLVM_EXTRACT")) {
+	extractProgram = extractProgramOverride;
+  }
+
   for (auto &function : loadedModule->functions()) {
     if (function.isDeclaration()) {
       continue;
@@ -110,15 +122,30 @@ int main(int argc, char **argv) {
 
     llvm::outs() << "# " << function.getName() << "\n";
     std::stringstream command;
-    command << "llvm-extract " << loadedModule->getName().str()
+    command << extractProgram << " " << loadedModule->getName().str()
             << " --func=" << function.getName().str() << " ";
 
     for (auto const &use : pass.globals) {
       command << "--glob=" << use->getName().str() << " ";
     }
     command << "-o " << outputDirectory << "/" << function.getName().str()
-            << ".bc &\n\n";
-    std::cout << command.str();
+            << ".bc "; 
+
+    std::cout << command.str() << "\n\n";
+
+    if (!dry) {
+      system(command.str().c_str());
+    }
+  }
+
+  for (auto &globalVariable : toSplit) {
+    std::stringstream command;
+    command << extractProgram << " " << loadedModule->getName().str()
+            << " --glob=" << globalVariable->getName().str() << " "
+            << "-o " << outputDirectory << "/"
+            << globalVariable->getName().str() << ".bc ";
+
+    std::cout << command.str() << "\n\n";
 
     if (!dry) {
       system(command.str().c_str());

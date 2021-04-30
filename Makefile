@@ -14,9 +14,22 @@ find-static: find-static.cpp
 split: split.cpp
 	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions split.cpp -o ./split
 
-bitcode: file.c
-	$(CC) -c -emit-llvm file.c
-	./main file.bc
+test-included: tests/test-mover-included.c
+	$(CC) -c -emit-llvm $< -o test.bc
+	./main test.bc
+
+test-llvm-extract: tests/test-llvm-extract.c
+	mkdir -p out
+	$(CC) -c -emit-llvm $< -o test.bc
+	./split test.bc -o out
+
+test-llvm-extract-static: tests/test-llvm-extract-static.c
+	mkdir -p out
+	$(CC) -c -emit-llvm $< -o test.bc
+	./split test.bc -o out
+
+test-compile: out
+	$(CC) $(wildcard out/*.bc) -o out/executable
 
 lib:
 	$(CC) -O2 -shared -fPIC lib.bc -o libex.so
