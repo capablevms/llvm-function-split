@@ -12,7 +12,7 @@ find-static: find-static.cpp
 	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions find-static.cpp -o ./find-static
 
 split: split.cpp
-	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions split.cpp -o ./split
+	$(CXX) ${CXXFLAGS} -O0 -g3 $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions split.cpp -o ./split
 
 test-included: tests/test-mover-included.c
 	$(CC) -c -emit-llvm $< -o test.bc
@@ -25,7 +25,7 @@ test-llvm-extract: tests/test-llvm-extract.c
 
 test-llvm-extract-static: tests/test-llvm-extract-static.c
 	mkdir -p out
-	$(CC) -c -emit-llvm $< -o test.bc
+	$(CC) -fPIC -c -emit-llvm $< -o test.bc
 	./split test.bc -o out
 
 test-compile: out

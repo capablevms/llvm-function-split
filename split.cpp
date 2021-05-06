@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <pstl/glue_execution_defs.h>
 #include <queue>
 #include <sstream>
 #include <string>
@@ -39,6 +40,8 @@
 #include <llvm/Transforms/Utils/ValueMapper.h>
 
 #include <assert.h>
+#include <mutex>
+#include <thread>
 #include <typeinfo>
 
 static llvm::LLVMContext context;
@@ -57,7 +60,8 @@ llvm::cl::opt<bool> dry("d",
 
 llvm::cl::opt<bool> verbose("v", llvm::cl::desc("Enable vrbose output."));
 
-std::set<llvm::GlobalValue *> toSplit;
+std::set<llvm::GlobalVariable *> toSplit;
+std::mutex globalsMutex;
 
 struct MyPass : public llvm::InstVisitor<MyPass> {
   std::unordered_set<llvm::GlobalVariable *> globals;
@@ -80,6 +84,7 @@ struct MyPass : public llvm::InstVisitor<MyPass> {
         if (globalVariable->isConstant()) {
           globals.insert(globalVariable);
         } else {
+          std::lock_guard<std::mutex> guard(globalsMutex);
           toSplit.insert(globalVariable);
         }
       } else if (auto user = llvm::dyn_cast<llvm::User>(currentOperand)) {
@@ -99,56 +104,61 @@ struct MyPass : public llvm::InstVisitor<MyPass> {
 
 int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv);
-
   std::string file;
+  std::error_code ecode;
   std::unique_ptr<llvm::Module> loadedModule =
       llvm::parseIRFile(inputFilename, err, context);
-
   std::unordered_map<const llvm::Function *, std::set<llvm::GlobalVariable *>>
       users;
+  std::string extractFilename = inputFilename;
+  std::string extractProgram = "llvm-extract";
 
-
-  char* extractProgram = "llvm-extract";
-  if(auto extractProgramOverride = std::getenv("LLVM_EXTRACT")) {
-	extractProgram = extractProgramOverride;
+  if (auto extractProgramOverride = std::getenv("LLVM_EXTRACT")) {
+    extractProgram = std::string(extractProgramOverride);
   }
 
-  for (auto &function : loadedModule->functions()) {
+#pragma omp parallel
+#pragma omp single
+  for (llvm::Function &function : loadedModule->functions()) {
     if (function.isDeclaration()) {
       continue;
     }
+    const auto name = function.getName().str();
     MyPass pass;
     pass.visit(function);
 
-    llvm::outs() << "# " << function.getName() << "\n";
     std::stringstream command;
-    command << extractProgram << " " << loadedModule->getName().str()
-            << " --func=" << function.getName().str() << " ";
+    command << extractProgram << " " << extractFilename << " --func=" << name
+            << " ";
 
     for (auto const &use : pass.globals) {
       command << "--glob=" << use->getName().str() << " ";
     }
-    command << "-o " << outputDirectory << "/" << function.getName().str()
-            << ".bc "; 
+    command << "-o " << outputDirectory << "/" << name << ".bc ";
 
     std::cout << command.str() << "\n\n";
-
+    const auto materializedCommand = command.str();
+#pragma omp task
     if (!dry) {
-      system(command.str().c_str());
+      std::cout << "# " << std::this_thread::get_id() << " : " << name << "\n";
+      system(materializedCommand.c_str());
     }
   }
 
-  for (auto &globalVariable : toSplit) {
+#pragma omp parallel
+#pragma omp single
+  for (llvm::GlobalVariable *globalVariable : toSplit) {
     std::stringstream command;
-    command << extractProgram << " " << loadedModule->getName().str()
+    command << extractProgram << " " << extractFilename
             << " --glob=" << globalVariable->getName().str() << " "
             << "-o " << outputDirectory << "/"
             << globalVariable->getName().str() << ".bc ";
 
     std::cout << command.str() << "\n\n";
-
+    std::string materializedCommand = command.str();
+#pragma omp task
     if (!dry) {
-      system(command.str().c_str());
+      system(materializedCommand.c_str());
     }
   }
 }
