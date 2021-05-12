@@ -10,13 +10,13 @@ int b() {
 	return a() + data + 5;
 }
 
-int c() {
+int cc() {
 	data += 1;
 	return a() + data + 1;
 }
 
 int main() {
-	printf("%d %d\n", b(), c());
+	printf("%d %d\n", b(), cc());
 }
 
 

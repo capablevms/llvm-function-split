@@ -40,7 +40,6 @@
 #include <llvm/Transforms/Utils/ValueMapper.h>
 
 #include <assert.h>
-#include <mutex>
 #include <thread>
 #include <typeinfo>
 
@@ -59,9 +58,6 @@ llvm::cl::opt<bool> dry("d",
                         llvm::cl::desc("Run without executing the commands."));
 
 llvm::cl::opt<bool> verbose("v", llvm::cl::desc("Enable vrbose output."));
-
-std::set<llvm::GlobalVariable *> toSplit;
-std::mutex globalsMutex;
 
 struct MyPass : public llvm::InstVisitor<MyPass> {
   std::unordered_set<llvm::GlobalVariable *> globals;
@@ -83,10 +79,7 @@ struct MyPass : public llvm::InstVisitor<MyPass> {
                      llvm::dyn_cast<llvm::GlobalVariable>(currentOperand)) {
         if (globalVariable->isConstant()) {
           globals.insert(globalVariable);
-        } else {
-          std::lock_guard<std::mutex> guard(globalsMutex);
-          toSplit.insert(globalVariable);
-        }
+        } 
       } else if (auto user = llvm::dyn_cast<llvm::User>(currentOperand)) {
         for (uint32_t i = 0; i < user->getNumOperands(); i++) {
           auto nextOperand = user->getOperand(i);
@@ -110,11 +103,72 @@ int main(int argc, char **argv) {
       llvm::parseIRFile(inputFilename, err, context);
   std::unordered_map<const llvm::Function *, std::set<llvm::GlobalVariable *>>
       users;
-  std::string extractFilename = inputFilename;
+  std::string extractFilename = "temp.bc";
   std::string extractProgram = "llvm-extract";
 
   if (auto extractProgramOverride = std::getenv("LLVM_EXTRACT")) {
     extractProgram = std::string(extractProgramOverride);
+  }
+
+  for (auto &global : loadedModule->globals()) {
+    if (global.isConstant()) {
+      continue;
+    }
+    global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+    global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
+    global.setDSOLocal(false);
+    global.getInitializer();
+  }
+
+  if (!dry) {
+    llvm::raw_fd_ostream outputFile("temp.bc", ecode);
+    llvm::WriteBitcodeToFile(*loadedModule, outputFile);
+    outputFile.close();
+  }
+
+#pragma omp parallel
+#pragma omp single
+  for (llvm::GlobalVariable &globalVariable : loadedModule->globals()) {
+    if(globalVariable.isConstant() || globalVariable.isExternallyInitialized()) {
+      continue;
+    }
+    std::stringstream command;
+    command << extractProgram << " " << extractFilename
+            << " --glob=" << globalVariable.getName().str() << " "
+            << "-o " << outputDirectory << "/"
+            << "_" << globalVariable.getName().str() << ".bc ";
+
+    std::cout << command.str() << "\n\n";
+    std::string materializedCommand = command.str();
+#pragma omp task
+    if (!dry) {
+      system(materializedCommand.c_str());
+    }
+  }
+
+  for (auto &global : loadedModule->globals()) {
+    if (global.isConstant()) {
+      continue;
+    }
+    global.setInitializer(nullptr);
+    global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+    global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
+    global.setDSOLocal(false);
+  }
+
+  for (auto &function : loadedModule->functions()) {
+    if (function.isDeclaration()) {
+      continue;
+    }
+    function.setVisibility(
+        llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+    function.setLinkage(llvm::GlobalValue::ExternalLinkage);
+  }
+
+  if (!dry) {
+    llvm::raw_fd_ostream outputFile("temp.bc", ecode);
+    llvm::WriteBitcodeToFile(*loadedModule, outputFile);
+    outputFile.close();
   }
 
 #pragma omp parallel
@@ -134,30 +188,13 @@ int main(int argc, char **argv) {
     for (auto const &use : pass.globals) {
       command << "--glob=" << use->getName().str() << " ";
     }
-    command << "-o " << outputDirectory << "/" << name << ".bc ";
+    command << "-o " << outputDirectory << "/" << "_" << name << ".bc ";
 
     std::cout << command.str() << "\n\n";
     const auto materializedCommand = command.str();
 #pragma omp task
     if (!dry) {
       std::cout << "# " << std::this_thread::get_id() << " : " << name << "\n";
-      system(materializedCommand.c_str());
-    }
-  }
-
-#pragma omp parallel
-#pragma omp single
-  for (llvm::GlobalVariable *globalVariable : toSplit) {
-    std::stringstream command;
-    command << extractProgram << " " << extractFilename
-            << " --glob=" << globalVariable->getName().str() << " "
-            << "-o " << outputDirectory << "/"
-            << globalVariable->getName().str() << ".bc ";
-
-    std::cout << command.str() << "\n\n";
-    std::string materializedCommand = command.str();
-#pragma omp task
-    if (!dry) {
       system(materializedCommand.c_str());
     }
   }

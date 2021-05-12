@@ -6,13 +6,13 @@ export
 all: main find-static
 
 main: main.cpp
-	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions main.cpp -o ./main
+	$(CXX) -fuse-ld=lld -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions main.cpp -o ./main
 
 find-static: find-static.cpp
-	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions find-static.cpp -o ./find-static
+	$(CXX) -fuse-ld=lld -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions find-static.cpp -o ./find-static
 
 split: split.cpp
-	$(CXX) ${CXXFLAGS} -O0 -g3 $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions split.cpp -o ./split
+	$(CXX) ${CXXFLAGS} -fuse-ld=lld -O0 -g3 $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions split.cpp -o ./split
 
 test-included: tests/test-mover-included.c
 	$(CC) -c -emit-llvm $< -o test.bc
