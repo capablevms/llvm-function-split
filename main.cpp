@@ -16,6 +16,7 @@
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Verifier.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/CommandLine.h>
@@ -133,7 +134,9 @@ void moveFunctions(const llvm::StringRef outputName, const llvm::Module *module,
   llvm::raw_fd_ostream OS(outputName, ec);
   result.print(llvm::outs(), nullptr);
 
-  llvm::WriteBitcodeToFile(result, OS);
+  if(llvm::verifyModule(result, &llvm::outs(), nullptr)) {
+      llvm::WriteBitcodeToFile(result, OS);
+  }
 }
 
 llvm::SMDiagnostic err;
@@ -164,7 +167,7 @@ int main(int argc, char **argv) {
             return FunctionAction::MakePrivate;
           } else if (function.getName().equals("b")) {
             return FunctionAction::MakePublic;
-          } else if (function.getName().equals("c")) {
+          } else if (function.getName().equals("cc")) {
             return FunctionAction::MakePublic;
           } else {
             return FunctionAction::Skip;
@@ -176,7 +179,7 @@ int main(int argc, char **argv) {
         [](auto module, const llvm::Function &function) -> FunctionAction {
           if (function.getName().equals("b")) {
             return FunctionAction::MakeRefernce;
-          } else if (function.getName().equals("c")) {
+          } else if (function.getName().equals("cc")) {
             return FunctionAction::MakeRefernce;
           } else if (function.getName().equals("main")) {
             return FunctionAction::MakePublic;
