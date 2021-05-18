@@ -21,9 +21,20 @@ from the `whole-program-llvm` project:
 extract-bc python 
 ``` 
 
-The last step would be to execute the split utility. This can be done
-by running it like that: 
+The last step would be to execute the split utility. This can be done by 
+running it like that: 
 ```
-split python.bc -o outdir
+./split-llvm-extract python.bc -o outdir
 ```
+
+## Other variants
+
+There are 2 other utilities that reside in this repository. The [first
+one](manual-split.cpp) shows how splitting can be done using the llvm API
+instead of using `llvm-extract`.  The [other](find-and-split-static.cpp) utility
+focuses on finding functions which are not public and should be. It also tries
+to find ways to split the bitcode files while preserving the linkage of the
+functions. The 2 previously presented splitters are not meant for general
+purpose use, and are kept as a showcase of what is possible.
+
 

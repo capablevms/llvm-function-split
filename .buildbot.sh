@@ -6,8 +6,7 @@ export CHERI=$HOME/cheri/output/sdk
 export LD_LIBRARY_PATH=$CHERI/lib
 export CC=$CHERI/bin/clang 
 
-make CC=$CC CXX=$CHERI/bin/clang++ LLVM_CONFIG=$CHERI/bin/llvm-config
-make split CC=$CC CXX=$CHERI/bin/clang++ LLVM_CONFIG=$CHERI/bin/llvm-config
+make CC=$CC CXX=$CHERI/bin/clang++ LLVM_CONFIG=$CHERI/bin/llvm-config -j3
 
 make test-included CC=$CC CXX=$CHERI/bin/clang++ 
 
