@@ -9,11 +9,11 @@ int b() {
 	return a() + 5;
 }
 
-int c() {
+int cc() {
 	return a() + 1;
 }
 
 int main() {
-	printf("%d %d\n", b(), c());
-	return b() + c();
+	printf("%d %d\n", b(), cc());
+	return b() + cc();
 }
