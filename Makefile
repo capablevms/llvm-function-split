@@ -28,6 +28,11 @@ test-llvm-extract-static: tests/test-llvm-extract-static.c
 	$(CC) -fPIC -c -emit-llvm $< -o test.bc
 	./split-llvm-extract test.bc -o out
 
+test-global-dependency: tests/test-global-dependency.c
+	mkdir -p out
+	$(CC) -fPIC -c -emit-llvm $< -o test.bc
+	./split-llvm-extract test.bc -o out
+
 test-compile: out
 	$(CC) $(wildcard out/*.bc) -o out/executable
 

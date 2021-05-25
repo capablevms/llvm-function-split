@@ -23,3 +23,13 @@ done
 $CC _main.bc -L. -l_a -l_b -l_cc -l_data -o test
 cd ..
 rm -rfv out
+
+LLVM_EXTRACT=$CHERI/bin/llvm-extract make test-global-dependency CC=$CC CXX=$CHERI/bin/clang++ 
+make CC=$CC test-compile 
+cd out
+for file in *.bc; do
+    $CC -shared -fuse-ld=lld -fPIC $file -o lib${file/.bc/.so}
+done
+$CC _main.bc -L. -l_a -l_b -l_cc -l_len -l_data -o test
+cd ..
+rm -rfv out
