@@ -1,3 +1,4 @@
+#include "llvm/IR/GlobalObject.h"
 #include <algorithm>
 #include <execution>
 #include <fstream>
@@ -30,8 +31,10 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Operator.h>
 #include <llvm/IR/Use.h>
+#include <llvm/IR/DebugInfo.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Pass.h>
+#include <llvm/IR/User.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
@@ -59,41 +62,80 @@ llvm::cl::opt<bool> dry("d",
 
 llvm::cl::opt<bool> verbose("v", llvm::cl::desc("Enable vrbose output."));
 
-struct MyPass : public llvm::InstVisitor<MyPass> {
+std::unordered_set<llvm::GlobalVariable *> iterateOperands(llvm::User& user) {
+  std::stack<llvm::Value *> operands;
   std::unordered_set<llvm::GlobalVariable *> globals;
 
-  void visitInstruction(llvm::Instruction &instruction) {
-    std::stack<llvm::Value *> operands;
+  for(auto & operand : user.operands()) {
+    operands.push(operand);
+  }
 
-    for (uint32_t i = 0; i < instruction.getNumOperands(); i++) {
-      operands.push(instruction.getOperand(i));
-    }
+  while (operands.size() > 0) {
+    auto currentOperand = operands.top();
+    operands.pop();
 
-    while (operands.size() > 0) {
-      auto currentOperand = operands.top();
-      operands.pop();
-
-      if (currentOperand == nullptr) {
-        // TODO: ignore null's for now.
-      } else if (auto globalVariable =
-                     llvm::dyn_cast<llvm::GlobalVariable>(currentOperand)) {
-        if (globalVariable->isConstant()) {
-          globals.insert(globalVariable);
-        } 
-      } else if (auto user = llvm::dyn_cast<llvm::User>(currentOperand)) {
-        for (uint32_t i = 0; i < user->getNumOperands(); i++) {
-          auto nextOperand = user->getOperand(i);
-          if (auto instruction =
-                  llvm::dyn_cast<llvm::Instruction>(nextOperand)) {
-            continue;
-          } else {
-            operands.push(nextOperand);
-          }
+    if (auto globalVariable =
+                   llvm::dyn_cast<llvm::GlobalVariable>(currentOperand)) {
+      if (globalVariable->isConstant()) {
+        globals.insert(globalVariable);
+      } 
+    } else if (auto user = llvm::dyn_cast<llvm::User>(currentOperand)) {
+        
+      for(auto & nextOperand : user->operands()) {
+        if (auto instruction =
+                llvm::dyn_cast<llvm::Instruction>(nextOperand)) {
+          continue;
+        } else {
+          operands.push(nextOperand);
         }
       }
     }
   }
+  return globals;
+}
+
+struct MyPass : public llvm::InstVisitor<MyPass> {
+  std::unordered_set<llvm::GlobalVariable *> globals;
+  // TODO: Move this to a separate function because globals 
+  // also need the full dependency tree moved.
+  void visitInstruction(llvm::Instruction &instruction) {
+    std::queue<llvm::GlobalVariable *> queueVariablesNeedMoving;
+    {
+      auto result = iterateOperands(instruction);
+      for(const auto item : result) {
+        queueVariablesNeedMoving.push(item);
+      }
+    }
+    while(queueVariablesNeedMoving.size() > 0) {
+      auto currentVariable = queueVariablesNeedMoving.front();
+      queueVariablesNeedMoving.pop();
+      globals.insert(currentVariable);
+
+      if(currentVariable->hasInitializer()) {
+        auto alsoNeedMvoing = iterateOperands(*currentVariable->getInitializer());
+        for(const auto item : alsoNeedMvoing) {
+          if(globals.find(item) == globals.end()) {
+            queueVariablesNeedMoving.push(item);
+          }
+        }
+     }
+    }
+  }
 };
+
+// Returns an empty string if no debug info can be found. 
+std::string getFileName(llvm::GlobalObject &value){
+  llvm::SmallVector<std::pair<unsigned, llvm::MDNode *>, 4> MDs;
+  value.getAllMetadata(MDs);
+  for (auto &MD : MDs) {
+    if (llvm::MDNode *N = MD.second) {
+      if (auto *subProgram = llvm::dyn_cast<llvm::DISubprogram>(N)) {
+        return subProgram->getFilename().str();
+      }
+    }
+  }
+  return "";
+}
 
 int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv);
@@ -117,7 +159,6 @@ int main(int argc, char **argv) {
     global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
     global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
     global.setDSOLocal(false);
-    global.getInitializer();
   }
 
   if (!dry) {
@@ -132,10 +173,23 @@ int main(int argc, char **argv) {
     if(globalVariable.isConstant() || globalVariable.isExternallyInitialized()) {
       continue;
     }
+    
+    std::cout << getFileName(globalVariable) << "\n"; 
     std::stringstream command;
     command << extractProgram << " " << extractFilename
-            << " --glob=" << globalVariable.getName().str() << " "
-            << "-o " << outputDirectory << "/"
+            << " --glob=" << globalVariable.getName().str() << " ";
+
+    if(globalVariable.hasInitializer()) {
+      // TODO: Use the same technique as in the pass to move the whole 
+      // dependency tree moved.
+      auto globals = iterateOperands(*globalVariable.getInitializer());
+
+      for(const auto dependantVariable : globals) {
+        command << " --glob=" << dependantVariable->getName().str() << " ";
+      }
+    }
+
+    command << "-o " << outputDirectory << "/"
             << "_" << globalVariable.getName().str() << ".bc ";
 
     std::cout << command.str() << "\n\n";
@@ -163,6 +217,7 @@ int main(int argc, char **argv) {
     function.setVisibility(
         llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
     function.setLinkage(llvm::GlobalValue::ExternalLinkage);
+    function.setDSOLocal(false);
   }
 
   if (!dry) {
@@ -177,6 +232,13 @@ int main(int argc, char **argv) {
     if (function.isDeclaration()) {
       continue;
     }
+    
+    if(function.getName().equals("createmeta")) {
+      std::cout << "fount \n";
+    }
+
+    std::cout << "filename: " << getFileName(function) << "\n"; 
+
     const auto name = function.getName().str();
     MyPass pass;
     pass.visit(function);
