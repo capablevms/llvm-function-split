@@ -50,12 +50,12 @@ void moveFunctions(const llvm::StringRef outputName, const llvm::Module *module,
 
   /*
     The value to value map is the central datastructure to the function
-    cloning/moving. It is used to map the llvm values that reside in the original
-    module to the ones that reside in the new resutling module module.
+    cloning/moving. It is used to map the llvm values that reside in the
+    original module to the ones that reside in the new resutling module module.
   */
   llvm::ValueToValueMapTy vMap;
 
-  // Move the global values over, as they are used even when no gobal values are 
+  // Move the global values over, as they are used even when no gobal values are
   // present in the code, for things like string literals.
   for (const auto &global : module->globals()) {
     std::cout << global.getName().str() << std::endl;
@@ -134,8 +134,8 @@ void moveFunctions(const llvm::StringRef outputName, const llvm::Module *module,
   llvm::raw_fd_ostream OS(outputName, ec);
   result.print(llvm::outs(), nullptr);
 
-  if(llvm::verifyModule(result, &llvm::outs(), nullptr)) {
-      llvm::WriteBitcodeToFile(result, OS);
+  if (llvm::verifyModule(result, &llvm::outs(), nullptr)) {
+    llvm::WriteBitcodeToFile(result, OS);
   }
 }
 

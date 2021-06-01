@@ -1,0 +1,17 @@
+[package]
+name = "bf_tests"
+version = "0.1.0"
+authors = ["Laurence Tratt <laurie@tratt.net>"]
+edition = "2018"
+
+
+[[test]]
+name = "lang_tests"
+path = "run.rs"
+harness = false
+
+[dependencies]
+lang_tester = "0.6"
+lazy_static = "1.4"
+regex = "1.5"
+tempfile = "3"
