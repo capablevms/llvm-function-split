@@ -46,8 +46,7 @@ llvm::cl::opt<std::string>
     ExtractFunction("e", llvm::cl::desc("Function to extract."),
                     llvm::cl::value_desc("function name"));
 
-llvm::cl::opt<bool>
-    Verbose("v", llvm::cl::desc("Enable vrbose output."));
+llvm::cl::opt<bool> Verbose("v", llvm::cl::desc("Enable verbose output."));
 
 std::unordered_map<llvm::GlobalValue::LinkageTypes, std::string> linkageTypes =
     {
@@ -65,7 +64,8 @@ std::unordered_map<llvm::GlobalValue::VisibilityTypes, std::string>
         {llvm::GlobalValue::VisibilityTypes::ProtectedVisibility,
          "(protected)"}};
 
-std::unordered_set<llvm::GlobalVariable *> getUses(const llvm::Function &function) {
+std::unordered_set<llvm::GlobalVariable *>
+getUses(const llvm::Function &function) {
   std::queue<llvm::User *> operands;
   std::unordered_set<llvm::GlobalVariable *> globals;
   for (const auto &basicBlock : function.getBasicBlockList()) {
@@ -226,7 +226,7 @@ int main(int argc, char **argv) {
         value->getName().str() == ExtractFunction) {
       if (viable) {
         std::cout << key << ": " << visibility << " " << linkage << std::endl;
-        if(Verbose) {
+        if (Verbose) {
           std::cout << out.str();
         }
         std::cout << command.str();

@@ -2,34 +2,24 @@
 
 set -e
 
+find . -iname "*.c" -o -iname "*.h" -o -iname "*.cpp" -o -iname "*.hpp" | xargs ~/cheri/output/sdk/bin/clang-format --dry-run -Werror
+
 export CHERI=$HOME/cheri/output/sdk
 export LD_LIBRARY_PATH=$CHERI/lib
 export CC=$CHERI/bin/clang 
+export LLVM_EXTRACT=$CHERI/bin/llvm-extract
 
 make CC=$CC CXX=$CHERI/bin/clang++ LLVM_CONFIG=$CHERI/bin/llvm-config -j3
 
-make test-included CC=$CC CXX=$CHERI/bin/clang++ 
+cd tests
 
-LLVM_EXTRACT=$CHERI/bin/llvm-extract make test-llvm-extract CC=$CC CXX=$CHERI/bin/clang++ 
-make CC=$CC test-compile 
-rm -rfv out
-
-LLVM_EXTRACT=$CHERI/bin/llvm-extract make test-llvm-extract-static CC=$CC CXX=$CHERI/bin/clang++ 
-make CC=$CC test-compile 
-cd out
-for file in *.bc; do
-    $CC -shared -fuse-ld=lld -fPIC $file -o lib${file/.bc/.so}
-done
-$CC _main.bc -L. -l_a -l_b -l_cc -l_data -o test
-cd ..
-rm -rfv out
-
-LLVM_EXTRACT=$CHERI/bin/llvm-extract make test-global-dependency CC=$CC CXX=$CHERI/bin/clang++ 
-make CC=$CC test-compile 
-cd out
-for file in *.bc; do
-    $CC -shared -fuse-ld=lld -fPIC $file -o lib${file/.bc/.so}
-done
-$CC _main.bc -L. -l_a -l_b -l_cc -l_len -l_data -o test
-cd ..
-rm -rfv out
+if ! [ -x "$(command -v cargo)" ]; then
+	curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh
+	sh rustup.sh --default-host x86_64-unknown-linux-gnu \
+		--default-toolchain stable \
+		--no-modify-path \
+		--profile minimal \
+		-y
+	source $HOME/.cargo/env
+fi
+cargo test
