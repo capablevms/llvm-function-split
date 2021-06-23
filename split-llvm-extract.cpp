@@ -1,3 +1,13 @@
+/*
+ * A program that uses llvm-extract to split
+ * LLVM bitcode `*.bc` files into modules containing only
+ * a single function/global.
+ *
+ * The exact llvm-extract binary can be be passed as the env
+ * var LLVM_EXTRACT to override the default. The reason to do so
+ * is that it may differ depending on architectures/systems.
+ */
+
 #include "llvm/IR/GlobalObject.h"
 #include <algorithm>
 #include <execution>
@@ -60,8 +70,19 @@ llvm::cl::opt<std::string>
 llvm::cl::opt<bool> dry("d",
                         llvm::cl::desc("Run without executing the commands."));
 
-llvm::cl::opt<bool> verbose("v", llvm::cl::desc("Enable vrbose output."));
+llvm::cl::opt<bool> verbose("v", llvm::cl::desc("Enable verbose output."));
 
+/**
+ * Utilize the User api to find all of the operands
+ * referenced by a specific instruction.
+ *
+ * It uses an in-order tree traversal to find all the
+ * operands and then stores the ones of type llvm::GlobalVariable
+ * and are constants in the globals set.
+ *
+ * @param user The instruction from which the iteration starts.
+ * @return A set of the global variables referenced by user.
+ */
 std::unordered_set<llvm::GlobalVariable *> iterateOperands(llvm::User &user) {
   std::stack<llvm::Value *> operands;
   std::unordered_set<llvm::GlobalVariable *> globals;
@@ -93,6 +114,19 @@ std::unordered_set<llvm::GlobalVariable *> iterateOperands(llvm::User &user) {
   return globals;
 }
 
+/**
+ * This function uses iterateOperands to find all the
+ * globals that will be moved. Then it uses iterateOperands
+ * on their initializers (initializers are llvm::Constant which
+ * are like instructions but can be resolved at compile time)
+ * to see which other globals will need to be moved with them.
+ *
+ * This algorithm uses BFS to iterate the tree and find all of
+ * the needed llvm::GlobalVariable.
+ *
+ * @user The user from which the search starts.
+ * @return All of the global constants that must be moved together.
+ */
 std::unordered_set<llvm::GlobalVariable *>
 resolveAllDependencies(llvm::User &user) {
   std::unordered_set<llvm::GlobalVariable *> globals;
@@ -117,10 +151,14 @@ resolveAllDependencies(llvm::User &user) {
   return globals;
 }
 
+/**
+ * This is an LLVM instruction visitor.
+ * Instead of manually going over all of the basic blocks
+ * and then iterating over the instruction a visitor is used
+ * to get to the instructions directly.
+ */
 struct MyPass : public llvm::InstVisitor<MyPass> {
   std::unordered_set<llvm::GlobalVariable *> globals;
-  // TODO: Move this to a separate function because globals
-  // also need the full dependency tree moved.
   void visitInstruction(llvm::Instruction &instruction) {
     for (const auto item : resolveAllDependencies(instruction)) {
       globals.insert(item);
@@ -128,7 +166,11 @@ struct MyPass : public llvm::InstVisitor<MyPass> {
   }
 };
 
-// Returns an empty string if no debug info can be found.
+/**
+ * @return The filename of the function/global/variable using the
+ * debug information. Returns an empty string if no debug info
+ * can be found.
+ */
 std::string getFileName(llvm::GlobalObject &value) {
   llvm::SmallVector<std::pair<unsigned, llvm::MDNode *>, 4> MDs;
   value.getAllMetadata(MDs);
@@ -144,6 +186,7 @@ std::string getFileName(llvm::GlobalObject &value) {
 
 int main(int argc, char **argv) {
   llvm::cl::ParseCommandLineOptions(argc, argv);
+
   std::string file;
   std::error_code ecode;
   std::unique_ptr<llvm::Module> loadedModule =
@@ -156,6 +199,16 @@ int main(int argc, char **argv) {
   if (auto extractProgramOverride = std::getenv("LLVM_EXTRACT")) {
     extractProgram = std::string(extractProgramOverride);
   }
+
+  /**
+   * Moving happens on multiple stages.
+   *
+   * This is the first stage where all the properties of the
+   * globals and functions in the modules are changed and saved
+   * as a temporary module. This is done because later on
+   * llvm-extract will be ran on this new module not on the
+   * one given as an argument to the program.
+   */
 
   for (auto &global : loadedModule->globals()) {
     if (global.isConstant()) {
@@ -185,6 +238,12 @@ int main(int argc, char **argv) {
     outputFile.close();
   }
 
+  /**
+   * This is the second stage.
+   *
+   * Here we find all of the globals that are suitable for
+   * moving, create a command to move them and then execute it,
+   */
 #pragma omp parallel
 #pragma omp single
   for (llvm::GlobalVariable &globalVariable : loadedModule->globals()) {
@@ -216,6 +275,17 @@ int main(int argc, char **argv) {
     }
   }
 
+  /**
+   * This is the third stage.
+   *
+   * Here all of the already moved variables' definitions get changed to
+   * declarations. This is done because when moving llvm-extract will just
+   * copy the referenced globals, but that means that it will copy it as an
+   * empty definition, which will fail when compiling, when changed to a
+   * declaration it would expect the global to be defined in an external module.
+   * Changing these things again requires creating a new temp.bc file that will
+   * then be used when splitting.
+   */
   for (auto &global : loadedModule->globals()) {
     if (global.isConstant()) {
       continue;
@@ -232,15 +302,17 @@ int main(int argc, char **argv) {
     outputFile.close();
   }
 
+  /**
+   * This is the forth and final stage.
+   *
+   * All of the functions are iterated and commands for splitting
+   * them are then created and executed.
+   */
 #pragma omp parallel
 #pragma omp single
   for (llvm::Function &function : loadedModule->functions()) {
     if (function.isDeclaration()) {
       continue;
-    }
-
-    if (function.getName().equals("createmeta")) {
-      std::cout << "fount \n";
     }
 
     std::cout << "filename: " << getFileName(function) << "\n";
