@@ -1,18 +1,21 @@
 CC=clang
 CXX=clang++
 LLVM_CONFIG=llvm-config
+CFORMAT ?= clang-format
+CPPFILES = $(wildcard *.cpp)
+CFILES = $(wildcard tests/*.c)
 export
 
 all: manual-split find-and-split-static split-llvm-extract
 
 manual-split: manual-split.cpp
-	$(CXX) -fuse-ld=lld -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./manual-split
+	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./manual-split
 
 find-and-split-static: find-and-split-static.cpp
-	$(CXX) -fuse-ld=lld -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./find-and-split-static
+	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./find-and-split-static
 
 split-llvm-extract: split-llvm-extract.cpp
-	$(CXX) ${CXXFLAGS} -fuse-ld=lld -g3 $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./split-llvm-extract
+	$(CXX) ${CXXFLAGS} -g3 $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./split-llvm-extract
 
 test-included: tests/test-mover-included.c
 	$(CC) -c -emit-llvm $< -o test.bc
@@ -39,3 +42,9 @@ test-compile: out
 lib:
 	$(CC) -O2 -shared -fPIC lib.bc -o libex.so
 	$(CC) -fPIE -L. -lex  -Wl,-rpath,. main.bc -o test_lib
+
+clang-format:
+	$(CFORMAT) -i $(CPPFILES) $(CFILES)
+
+clean:
+	rm find-and-split-static manual-split split-llvm-extract

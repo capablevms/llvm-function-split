@@ -59,16 +59,13 @@
 static llvm::LLVMContext context;
 llvm::SMDiagnostic err;
 
-llvm::cl::opt<std::string> inputFilename(llvm::cl::Positional,
-                                         llvm::cl::desc("<input file>"),
-                                         llvm::cl::Required);
+llvm::cl::opt<std::string> inputFilename(llvm::cl::Positional, llvm::cl::desc("<input file>"),
+										 llvm::cl::Required);
 
 llvm::cl::opt<std::string>
-    outputDirectory("o",
-                    llvm::cl::desc("Where the output files will be created."),
-                    llvm::cl::Required);
-llvm::cl::opt<bool> dry("d",
-                        llvm::cl::desc("Run without executing the commands."));
+	outputDirectory("o", llvm::cl::desc("Where the output files will be created."),
+					llvm::cl::Required);
+llvm::cl::opt<bool> dry("d", llvm::cl::desc("Run without executing the commands."));
 
 llvm::cl::opt<bool> verbose("v", llvm::cl::desc("Enable verbose output."));
 
@@ -83,35 +80,45 @@ llvm::cl::opt<bool> verbose("v", llvm::cl::desc("Enable verbose output."));
  * @param user The instruction from which the iteration starts.
  * @return A set of the global variables referenced by user.
  */
-std::unordered_set<llvm::GlobalVariable *> iterateOperands(llvm::User &user) {
-  std::stack<llvm::Value *> operands;
-  std::unordered_set<llvm::GlobalVariable *> globals;
+std::unordered_set<llvm::GlobalVariable *> iterateOperands(llvm::User &user)
+{
+	std::stack<llvm::Value *> operands;
+	std::unordered_set<llvm::GlobalVariable *> globals;
 
-  for (auto &operand : user.operands()) {
-    operands.push(operand);
-  }
+	for (auto &operand : user.operands())
+	{
+		operands.push(operand);
+	}
 
-  while (operands.size() > 0) {
-    auto currentOperand = operands.top();
-    operands.pop();
+	while (operands.size() > 0)
+	{
+		auto currentOperand = operands.top();
+		operands.pop();
 
-    if (auto globalVariable =
-            llvm::dyn_cast<llvm::GlobalVariable>(currentOperand)) {
-      if (globalVariable->isConstant()) {
-        globals.insert(globalVariable);
-      }
-    } else if (auto user = llvm::dyn_cast<llvm::User>(currentOperand)) {
+		if (auto globalVariable = llvm::dyn_cast<llvm::GlobalVariable>(currentOperand))
+		{
+			if (globalVariable->isConstant())
+			{
+				globals.insert(globalVariable);
+			}
+		}
+		else if (auto user = llvm::dyn_cast<llvm::User>(currentOperand))
+		{
 
-      for (auto &nextOperand : user->operands()) {
-        if (auto instruction = llvm::dyn_cast<llvm::Instruction>(nextOperand)) {
-          continue;
-        } else {
-          operands.push(nextOperand);
-        }
-      }
-    }
-  }
-  return globals;
+			for (auto &nextOperand : user->operands())
+			{
+				if (auto instruction = llvm::dyn_cast<llvm::Instruction>(nextOperand))
+				{
+					continue;
+				}
+				else
+				{
+					operands.push(nextOperand);
+				}
+			}
+		}
+	}
+	return globals;
 }
 
 /**
@@ -127,28 +134,32 @@ std::unordered_set<llvm::GlobalVariable *> iterateOperands(llvm::User &user) {
  * @user The user from which the search starts.
  * @return All of the global constants that must be moved together.
  */
-std::unordered_set<llvm::GlobalVariable *>
-resolveAllDependencies(llvm::User &user) {
-  std::unordered_set<llvm::GlobalVariable *> globals;
-  std::queue<llvm::GlobalVariable *> queueVariablesNeedMoving;
-  for (const auto item : iterateOperands(user)) {
-    queueVariablesNeedMoving.push(item);
-  }
-  while (queueVariablesNeedMoving.size() > 0) {
-    auto currentVariable = queueVariablesNeedMoving.front();
-    queueVariablesNeedMoving.pop();
-    globals.insert(currentVariable);
+std::unordered_set<llvm::GlobalVariable *> resolveAllDependencies(llvm::User &user)
+{
+	std::unordered_set<llvm::GlobalVariable *> globals;
+	std::queue<llvm::GlobalVariable *> queueVariablesNeedMoving;
+	for (const auto item : iterateOperands(user))
+	{
+		queueVariablesNeedMoving.push(item);
+	}
+	while (queueVariablesNeedMoving.size() > 0)
+	{
+		auto currentVariable = queueVariablesNeedMoving.front();
+		queueVariablesNeedMoving.pop();
+		globals.insert(currentVariable);
 
-    if (currentVariable->hasInitializer()) {
-      for (const auto item :
-           iterateOperands(*currentVariable->getInitializer())) {
-        if (globals.find(item) == globals.end()) {
-          queueVariablesNeedMoving.push(item);
-        }
-      }
-    }
-  }
-  return globals;
+		if (currentVariable->hasInitializer())
+		{
+			for (const auto item : iterateOperands(*currentVariable->getInitializer()))
+			{
+				if (globals.find(item) == globals.end())
+				{
+					queueVariablesNeedMoving.push(item);
+				}
+			}
+		}
+	}
+	return globals;
 }
 
 /**
@@ -157,13 +168,16 @@ resolveAllDependencies(llvm::User &user) {
  * and then iterating over the instruction a visitor is used
  * to get to the instructions directly.
  */
-struct MyPass : public llvm::InstVisitor<MyPass> {
-  std::unordered_set<llvm::GlobalVariable *> globals;
-  void visitInstruction(llvm::Instruction &instruction) {
-    for (const auto item : resolveAllDependencies(instruction)) {
-      globals.insert(item);
-    }
-  }
+struct MyPass : public llvm::InstVisitor<MyPass>
+{
+	std::unordered_set<llvm::GlobalVariable *> globals;
+	void visitInstruction(llvm::Instruction &instruction)
+	{
+		for (const auto item : resolveAllDependencies(instruction))
+		{
+			globals.insert(item);
+		}
+	}
 };
 
 /**
@@ -171,172 +185,188 @@ struct MyPass : public llvm::InstVisitor<MyPass> {
  * debug information. Returns an empty string if no debug info
  * can be found.
  */
-std::string getFileName(llvm::GlobalObject &value) {
-  llvm::SmallVector<std::pair<unsigned, llvm::MDNode *>, 4> MDs;
-  value.getAllMetadata(MDs);
-  for (auto &MD : MDs) {
-    if (llvm::MDNode *N = MD.second) {
-      if (auto *subProgram = llvm::dyn_cast<llvm::DISubprogram>(N)) {
-        return subProgram->getFilename().str();
-      }
-    }
-  }
-  return "";
+std::string getFileName(llvm::GlobalObject &value)
+{
+	llvm::SmallVector<std::pair<unsigned, llvm::MDNode *>, 4> MDs;
+	value.getAllMetadata(MDs);
+	for (auto &MD : MDs)
+	{
+		if (llvm::MDNode *N = MD.second)
+		{
+			if (auto *subProgram = llvm::dyn_cast<llvm::DISubprogram>(N))
+			{
+				return subProgram->getFilename().str();
+			}
+		}
+	}
+	return "";
 }
 
-int main(int argc, char **argv) {
-  llvm::cl::ParseCommandLineOptions(argc, argv);
+int main(int argc, char **argv)
+{
+	llvm::cl::ParseCommandLineOptions(argc, argv);
 
-  std::string file;
-  std::error_code ecode;
-  std::unique_ptr<llvm::Module> loadedModule =
-      llvm::parseIRFile(inputFilename, err, context);
-  std::unordered_map<const llvm::Function *, std::set<llvm::GlobalVariable *>>
-      users;
-  std::string extractFilename = "temp.bc";
-  std::string extractProgram = "llvm-extract";
+	std::string file;
+	std::error_code ecode;
+	std::unique_ptr<llvm::Module> loadedModule = llvm::parseIRFile(inputFilename, err, context);
+	std::unordered_map<const llvm::Function *, std::set<llvm::GlobalVariable *>> users;
+	std::string extractFilename = "temp.bc";
+	std::string extractProgram = "llvm-extract";
 
-  if (auto extractProgramOverride = std::getenv("LLVM_EXTRACT")) {
-    extractProgram = std::string(extractProgramOverride);
-  }
+	if (auto extractProgramOverride = std::getenv("LLVM_EXTRACT"))
+	{
+		extractProgram = std::string(extractProgramOverride);
+	}
 
-  /**
-   * Moving happens on multiple stages.
-   *
-   * This is the first stage where all the properties of the
-   * globals and functions in the modules are changed and saved
-   * as a temporary module. This is done because later on
-   * llvm-extract will be ran on this new module not on the
-   * one given as an argument to the program.
-   */
+	/**
+	 * Moving happens on multiple stages.
+	 *
+	 * This is the first stage where all the properties of the
+	 * globals and functions in the modules are changed and saved
+	 * as a temporary module. This is done because later on
+	 * llvm-extract will be ran on this new module not on the
+	 * one given as an argument to the program.
+	 */
 
-  for (auto &global : loadedModule->globals()) {
-    if (global.isConstant()) {
-      global.setVisibility(
-          llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
-      global.setDSOLocal(false);
-      continue;
-    }
-    global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
-    global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
-    global.setDSOLocal(false);
-  }
+	for (auto &global : loadedModule->globals())
+	{
+		if (global.isConstant())
+		{
+			global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+			global.setDSOLocal(false);
+			continue;
+		}
+		global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+		global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
+		global.setDSOLocal(false);
+	}
 
-  for (auto &function : loadedModule->functions()) {
-    if (function.isDeclaration()) {
-      continue;
-    }
-    function.setVisibility(
-        llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
-    function.setLinkage(llvm::GlobalValue::ExternalLinkage);
-    function.setDSOLocal(false);
-  }
+	for (auto &function : loadedModule->functions())
+	{
+		if (function.isDeclaration())
+		{
+			continue;
+		}
+		function.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+		function.setLinkage(llvm::GlobalValue::ExternalLinkage);
+		function.setDSOLocal(false);
+	}
 
-  if (!dry) {
-    llvm::raw_fd_ostream outputFile("temp.bc", ecode);
-    llvm::WriteBitcodeToFile(*loadedModule, outputFile);
-    outputFile.close();
-  }
+	if (!dry)
+	{
+		llvm::raw_fd_ostream outputFile("temp.bc", ecode);
+		llvm::WriteBitcodeToFile(*loadedModule, outputFile);
+		outputFile.close();
+	}
 
-  /**
-   * This is the second stage.
-   *
-   * Here we find all of the globals that are suitable for
-   * moving, create a command to move them and then execute it,
-   */
+	/**
+	 * This is the second stage.
+	 *
+	 * Here we find all of the globals that are suitable for
+	 * moving, create a command to move them and then execute it,
+	 */
 #pragma omp parallel
 #pragma omp single
-  for (llvm::GlobalVariable &globalVariable : loadedModule->globals()) {
-    if (globalVariable.isConstant() ||
-        globalVariable.isExternallyInitialized()) {
-      continue;
-    }
+	for (llvm::GlobalVariable &globalVariable : loadedModule->globals())
+	{
+		if (globalVariable.isConstant() || globalVariable.isExternallyInitialized())
+		{
+			continue;
+		}
 
-    std::cout << getFileName(globalVariable) << "\n";
-    std::stringstream command;
-    command << extractProgram << " " << extractFilename
-            << " --glob=" << globalVariable.getName().str() << " ";
+		std::cout << getFileName(globalVariable) << "\n";
+		std::stringstream command;
+		command << extractProgram << " " << extractFilename
+				<< " --glob=" << globalVariable.getName().str() << " ";
 
-    if (globalVariable.hasInitializer()) {
-      for (const auto dependency :
-           resolveAllDependencies(*globalVariable.getInitializer())) {
-        command << " --glob=" << dependency->getName().str() << " ";
-      }
-    }
+		if (globalVariable.hasInitializer())
+		{
+			for (const auto dependency : resolveAllDependencies(*globalVariable.getInitializer()))
+			{
+				command << " --glob=" << dependency->getName().str() << " ";
+			}
+		}
 
-    command << "-o " << outputDirectory << "/"
-            << "_" << globalVariable.getName().str() << ".bc ";
+		command << "-o " << outputDirectory << "/"
+				<< "_" << globalVariable.getName().str() << ".bc ";
 
-    std::cout << command.str() << "\n\n";
-    std::string materializedCommand = command.str();
+		std::cout << command.str() << "\n\n";
+		std::string materializedCommand = command.str();
 #pragma omp task
-    if (!dry) {
-      system(materializedCommand.c_str());
-    }
-  }
+		if (!dry)
+		{
+			system(materializedCommand.c_str());
+		}
+	}
 
-  /**
-   * This is the third stage.
-   *
-   * Here all of the already moved variables' definitions get changed to
-   * declarations. This is done because when moving llvm-extract will just
-   * copy the referenced globals, but that means that it will copy it as an
-   * empty definition, which will fail when compiling, when changed to a
-   * declaration it would expect the global to be defined in an external module.
-   * Changing these things again requires creating a new temp.bc file that will
-   * then be used when splitting.
-   */
-  for (auto &global : loadedModule->globals()) {
-    if (global.isConstant()) {
-      continue;
-    }
-    global.setInitializer(nullptr);
-    global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
-    global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
-    global.setDSOLocal(false);
-  }
+	/**
+	 * This is the third stage.
+	 *
+	 * Here all of the already moved variables' definitions get changed to
+	 * declarations. This is done because when moving llvm-extract will just
+	 * copy the referenced globals, but that means that it will copy it as an
+	 * empty definition, which will fail when compiling, when changed to a
+	 * declaration it would expect the global to be defined in an external module.
+	 * Changing these things again requires creating a new temp.bc file that will
+	 * then be used when splitting.
+	 */
+	for (auto &global : loadedModule->globals())
+	{
+		if (global.isConstant())
+		{
+			continue;
+		}
+		global.setInitializer(nullptr);
+		global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+		global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
+		global.setDSOLocal(false);
+	}
 
-  if (!dry) {
-    llvm::raw_fd_ostream outputFile("temp.bc", ecode);
-    llvm::WriteBitcodeToFile(*loadedModule, outputFile);
-    outputFile.close();
-  }
+	if (!dry)
+	{
+		llvm::raw_fd_ostream outputFile("temp.bc", ecode);
+		llvm::WriteBitcodeToFile(*loadedModule, outputFile);
+		outputFile.close();
+	}
 
-  /**
-   * This is the forth and final stage.
-   *
-   * All of the functions are iterated and commands for splitting
-   * them are then created and executed.
-   */
+	/**
+	 * This is the forth and final stage.
+	 *
+	 * All of the functions are iterated and commands for splitting
+	 * them are then created and executed.
+	 */
 #pragma omp parallel
 #pragma omp single
-  for (llvm::Function &function : loadedModule->functions()) {
-    if (function.isDeclaration()) {
-      continue;
-    }
+	for (llvm::Function &function : loadedModule->functions())
+	{
+		if (function.isDeclaration())
+		{
+			continue;
+		}
 
-    std::cout << "filename: " << getFileName(function) << "\n";
+		std::cout << "filename: " << getFileName(function) << "\n";
 
-    const auto name = function.getName().str();
-    MyPass pass;
-    pass.visit(function);
+		const auto name = function.getName().str();
+		MyPass pass;
+		pass.visit(function);
 
-    std::stringstream command;
-    command << extractProgram << " " << extractFilename << " --func=" << name
-            << " ";
+		std::stringstream command;
+		command << extractProgram << " " << extractFilename << " --func=" << name << " ";
 
-    for (auto const &use : pass.globals) {
-      command << "--glob=" << use->getName().str() << " ";
-    }
-    command << "-o " << outputDirectory << "/"
-            << "_" << name << ".bc ";
+		for (auto const &use : pass.globals)
+		{
+			command << "--glob=" << use->getName().str() << " ";
+		}
+		command << "-o " << outputDirectory << "/"
+				<< "_" << name << ".bc ";
 
-    std::cout << command.str() << "\n\n";
-    const auto materializedCommand = command.str();
+		std::cout << command.str() << "\n\n";
+		const auto materializedCommand = command.str();
 #pragma omp task
-    if (!dry) {
-      std::cout << "# " << std::this_thread::get_id() << " : " << name << "\n";
-      system(materializedCommand.c_str());
-    }
-  }
+		if (!dry)
+		{
+			std::cout << "# " << std::this_thread::get_id() << " : " << name << "\n";
+			system(materializedCommand.c_str());
+		}
+	}
 }
