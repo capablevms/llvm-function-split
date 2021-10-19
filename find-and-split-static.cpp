@@ -1,23 +1,14 @@
-#include <algorithm>
-#include <execution>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <queue>
 #include <sstream>
 #include <string>
-#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
-
-#include <llvm/ADT/SmallVector.h>
-#include <llvm/ADT/StringExtras.h>
-#include <llvm/ADT/StringRef.h>
 #include <llvm/Analysis/CallGraph.h>
 #include <llvm/Bitcode/BitcodeWriter.h>
-#include <llvm/IR/Argument.h>
 #include <llvm/IR/Constant.h>
-#include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/GlobalVariable.h>
@@ -25,16 +16,12 @@
 #include <llvm/IR/Instruction.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/Module.h>
-#include <llvm/IR/Use.h>
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Utils/Cloning.h>
-#include <llvm/Transforms/Utils/ValueMapper.h>
-
-#include <assert.h>
 
 static llvm::LLVMContext context;
 llvm::SMDiagnostic err;
