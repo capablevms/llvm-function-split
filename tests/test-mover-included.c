@@ -8,13 +8,23 @@ run:
 
 #include <stdio.h>
 
-__attribute__((visibility("hidden"))) int a() { return 9; }
+__attribute__((visibility("hidden"))) int a()
+{
+	return 9;
+}
 
-int b() { return a() + 5; }
+int b()
+{
+	return a() + 5;
+}
 
-int cc() { return a() + 1; }
+int cc()
+{
+	return a() + 1;
+}
 
-int main() {
-  printf("%d %d\n", b(), cc());
-  return b() + cc();
+int main()
+{
+	printf("%d %d\n", b(), cc());
+	return b() + cc();
 }

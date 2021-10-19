@@ -9,13 +9,23 @@ run:
 
 static int data = 99;
 
-int a() { return 9; }
-
-int b() { return a() + data + 5; }
-
-int cc() {
-  data += 1;
-  return a() + data + 1;
+int a()
+{
+	return 9;
 }
 
-int main() { printf("%d %d\n", b(), cc()); }
+int b()
+{
+	return a() + data + 5;
+}
+
+int cc()
+{
+	data += 1;
+	return a() + data + 1;
+}
+
+int main()
+{
+	printf("%d %d\n", b(), cc());
+}
