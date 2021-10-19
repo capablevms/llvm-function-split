@@ -76,7 +76,7 @@ void moveFunctions(const llvm::StringRef outputName, const llvm::Module *module,
     global.getAllMetadata(metadataList);
     for (auto [kind, node] : metadataList) {
       resultGlobal->addMetadata(
-          kind, *MapMetadata(node, vMap, llvm::RF_MoveDistinctMDs));
+          kind, *MapMetadata(node, vMap, llvm::RemapFlags::RF_ReuseAndMutateDistinctMDs));
     }
 
     if (global.hasInitializer()) {
@@ -118,7 +118,7 @@ void moveFunctions(const llvm::StringRef outputName, const llvm::Module *module,
 
     llvm::SmallVector<llvm::ReturnInst *, 8> returns;
     if (action != FunctionAction::MakeRefernce) {
-      llvm::CloneFunctionInto(resultFunction, &function, vMap, true, returns);
+      llvm::CloneFunctionInto(resultFunction, &function, vMap, llvm::CloneFunctionChangeType::DifferentModule, returns);
     }
     resultFunction->copyAttributesFrom(&function);
     copyComdat(&function, resultFunction);

@@ -1,4 +1,4 @@
-#/bin/sh
+#!/bin/sh
 
 set -e
 
@@ -34,7 +34,7 @@ tmpdir=/tmp/lua-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1
 mkdir -p $tmpdir
 cd $tmpdir
 	git clone --depth 1 -b v5.4.0 https://github.com/lua/lua.git .
-	make CC=$CC MYCFLAGS="-std=c99 -DLUA_USE_LINUX -fembed-bitcode -flto" MYLDFLAGS="-Wl,-E -fuse-ld=lld -flto -fembed-bitcode" AR="$AR rc" RANLIB=$RANLIB MYLIBS=" -ldl" -j 16
+	make CC=$CC MYCFLAGS="-std=c99 -DLUA_USE_LINUX -fembed-bitcode -flto" MYLDFLAGS="-Wl,-E -flto -fembed-bitcode" AR="$AR rc" RANLIB=$RANLIB MYLIBS=" -ldl" -j 16
 	$LLVM_LINK *.o -o lua.linked.bc
 	cp lua.linked.bc $repodir
 cd $repodir
