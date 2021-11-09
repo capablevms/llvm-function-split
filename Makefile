@@ -8,14 +8,8 @@ export
 
 all: manual-split find-and-split-static split-llvm-extract
 
-manual-split: manual-split.cpp
-	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./manual-split
-
-find-and-split-static: find-and-split-static.cpp
-	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./find-and-split-static
-
-split-llvm-extract: split-llvm-extract.cpp
-	$(CXX) ${CXXFLAGS} -g3 $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o ./split-llvm-extract
+manual-split find-and-split-static split-llvm-extract: %: %.cpp
+	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cppflags --ldflags --system-libs --libs) -std=c++17 -fno-exceptions $< -o $@
 
 test-included: tests/test-mover-included.c
 	$(CC) -c -emit-llvm $< -o test.bc
