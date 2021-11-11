@@ -1,4 +1,4 @@
-FILE=mandelbrot.lua-6.lua
+FILE=mandelbrot.lua-3.lua
 
 run:
 	$(LUA) $(FILE) 100 > out

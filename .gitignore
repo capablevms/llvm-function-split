@@ -33,3 +33,4 @@
 
 # Output folders
 out-*
+!out-lua/Makefile
