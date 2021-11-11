@@ -1,6 +1,6 @@
 #/bin/bash
 
-export LUA=../../out-lua/lua.shared
+export LUA=../../lua.shared
 
 rc="0"
 
