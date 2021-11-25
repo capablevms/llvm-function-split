@@ -53,6 +53,8 @@
 #include <llvm/Transforms/Utils/ValueMapper.h>
 
 #include <assert.h>
+#include <filesystem>
+#include <stack>
 #include <thread>
 #include <typeinfo>
 
@@ -287,6 +289,8 @@ int main(int argc, char **argv)
 			}
 		}
 
+		// Create directory if it does not exist
+		std::filesystem::create_directory(outputDirectory.c_str());
 		command << "-o " << outputDirectory << "/"
 				<< "_" << globalVariable.getName().str() << ".bc ";
 
@@ -357,6 +361,7 @@ int main(int argc, char **argv)
 		{
 			command << "--glob=" << use->getName().str() << " ";
 		}
+
 		command << "-o " << outputDirectory << "/"
 				<< "_" << name << ".bc ";
 
