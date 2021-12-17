@@ -271,15 +271,24 @@ int main(int argc, char **argv)
 #pragma omp single
 	for (llvm::GlobalVariable &globalVariable : loadedModule->globals())
 	{
-		if (globalVariable.isConstant() || globalVariable.isExternallyInitialized())
+		std::string globName;
+
+		if (globalVariable.isConstant() && globalVariable.hasInitializer())
 		{
-			continue;
+			if (!globalVariable.getInitializer()->hasName())
+			{
+				continue;
+			}
+			globName = globalVariable.getInitializer()->getName().str();
+		}
+		else
+		{
+			globName = globalVariable.getName().str();
 		}
 
 		std::cout << getFileName(globalVariable) << "\n";
 		std::stringstream command;
-		command << extractProgram << " " << extractFilename
-				<< " --glob=" << globalVariable.getName().str() << " ";
+		command << extractProgram << " " << extractFilename << " --glob=" << globName << " ";
 
 		if (globalVariable.hasInitializer())
 		{
@@ -292,7 +301,7 @@ int main(int argc, char **argv)
 		// Create directory if it does not exist
 		std::filesystem::create_directory(outputDirectory.c_str());
 		command << "-o " << outputDirectory << "/"
-				<< "_" << globalVariable.getName().str() << ".bc ";
+				<< "_" << globName << ".bc ";
 
 		std::cout << command.str() << "\n\n";
 		std::string materializedCommand = command.str();
