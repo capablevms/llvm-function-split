@@ -17,7 +17,11 @@ fn main() {
     let tempdir = TempDir::new().unwrap();
     LangTester::new()
         .test_dir(".")
-        .test_file_filter(|p| p.extension().map(|x| x.to_str().unwrap()) == Some("c"))
+        .test_file_filter(|p| {
+            p.extension().map(|x| x.to_str().unwrap()) == Some("c")
+            // skipping tests composed of multiple files
+                && p.parent().unwrap().file_name().unwrap().to_str() == Some("tests")
+        })
         .test_extract(|p| {
             EXPECTED
                 .captures(&fs::read_to_string(p).unwrap())
