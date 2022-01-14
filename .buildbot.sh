@@ -20,7 +20,7 @@ export SSHPORT=10021
 export SSH_OPTIONS='-o "StrictHostKeyChecking no"'
 export SCP_OPTIONS='-o "StrictHostKeyChecking no"'
 
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config -j4
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK -j4
 
 cd tests
 	if ! [ -x "$(command -v cargo)" ]; then
@@ -34,6 +34,9 @@ cd tests
 	fi
 	cargo test
 cd .. 
+
+# Test the handling of `extern` variables of type `const * const` when joining
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH test-extern-const-constptr
 
 tmpdir=/tmp/lua-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)/
 
