@@ -4,7 +4,7 @@ LLVM_CONFIG=llvm-config
 LLVM_LINK?=llvm-link
 CFORMAT ?= clang-format
 CPPFILES = $(wildcard *.cpp)
-CFILES = $(wildcard tests/**/*.c)
+CFILES = $(wildcard tests/**/*.c) $(wildcard tests/**/**/*.c)
 export
 
 all: manual-split find-and-split-static split-llvm-extract
@@ -32,6 +32,18 @@ test-global-dependency: tests/test-global-dependency.c
 	./split-llvm-extract test.bc -o out
 
 test-extern-const-constptr: $(wildcard tests/test-extern-const-constptr/*.c)
+	rm -Rf *.bc
+	rm -Rf out
+	mkdir -p out
+	$(CC) -fPIC -c -emit-llvm $^
+	$(LLVM_LINK) *.bc -o test.bc
+	./split-llvm-extract test.bc -o out
+	cp tests/Makefile out/.
+	cd out && $(MAKE)
+	rm -Rf out
+
+test-visibility: $(wildcard tests/test-visibility/*.c)
+	rm -Rf *.bc
 	rm -Rf out
 	mkdir -p out
 	$(CC) -fPIC -c -emit-llvm $^
