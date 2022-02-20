@@ -232,15 +232,9 @@ int main(int argc, char **argv)
 
 	for (auto &global : loadedModule->globals())
 	{
-		if (global.isConstant())
-		{
-			global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
-			global.setDSOLocal(false);
-			continue;
-		}
-		global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
-		global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
 		global.setDSOLocal(false);
+		global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
+		global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
 	}
 
 	for (auto &function : loadedModule->functions())
@@ -249,9 +243,9 @@ int main(int argc, char **argv)
 		{
 			continue;
 		}
-		function.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
-		function.setLinkage(llvm::GlobalValue::ExternalLinkage);
 		function.setDSOLocal(false);
+		function.setLinkage(llvm::GlobalValue::ExternalLinkage);
+		function.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
 	}
 
 	if (!dry)
@@ -329,10 +323,8 @@ int main(int argc, char **argv)
 		{
 			continue;
 		}
-		global.setInitializer(nullptr);
-		global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
-		global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
 		global.setDSOLocal(false);
+		global.setInitializer(nullptr);
 	}
 
 	if (!dry)

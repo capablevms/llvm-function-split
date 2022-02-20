@@ -37,6 +37,8 @@ cd ..
 
 # Test the handling of `extern` variables of type `const * const` when joining
 make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH test-extern-const-constptr
+# Test visibility is correctly set on global variables and functions
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH test-visibility
 
 tmpdir=/tmp/lua-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)/
 
