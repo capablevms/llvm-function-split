@@ -4,6 +4,12 @@
 
 set -e
 
+if ! [ "$1" = "riscv64" ]; then
+	echo "Only riscv64 is supported."
+	# Exit gracefully because we do not want the build to fail
+	exit 0
+fi
+
 find . -iname "*.c" -o -iname "*.h" -o -iname "*.cpp" -o -iname "*.hpp" | xargs ~/cheri/output/sdk/bin/clang-format --dry-run -Werror
 
 repodir=$(pwd)
