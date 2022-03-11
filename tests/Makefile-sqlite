@@ -1,0 +1,13 @@
+CC ?= gclang
+.PHONY: all clean
+
+all: $(patsubst %.bc,lib%.so,$(wildcard *.bc)) joined
+
+clean:
+	rm *.so *.bc joined
+
+joined: _main.bc
+	$(CC) $(CFLAGS) $< -L. $(patsubst %.bc,-l%,$(filter-out _main.bc,$(wildcard *.bc))) -L. -lm -lrt -ldl -lreadline -ltcl8.6 -lz -Wl,-rpath,$(shell pwd) -o joined
+	
+lib%.so: %.bc
+	$(CC) $(CFLAGS) -shared -fPIC $< -o lib$(basename $<).so

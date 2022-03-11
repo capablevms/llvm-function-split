@@ -1,6 +1,6 @@
 status = ["buildbot/capablevms-test-script"]
 
-timeout_sec = 12000 # 3.2h
+timeout_sec = 43200 # Temp set to 12h
 
 # Have bors delete auto-merged branches
 delete_merged_branches = true
