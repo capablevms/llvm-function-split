@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Buildbot script to check that `split-llvm-extract` works when applied to `lua` v5.4.0.
-# Only RISCV64 is tested at the moment.
+# Buildbot script to check that `split-llvm-extract`:
+#   1. Works under linux when applied to sqlite3 (proof of concept);
+#   2. works when applied to `lua` v5.4.0 cross compiling to CHERI.
+# Note: only RISCV64 is tested at the moment.
 
 set -e
 
@@ -14,19 +16,84 @@ find . -iname "*.c" -o -iname "*.h" -o -iname "*.cpp" -o -iname "*.hpp" | xargs 
 
 repodir=$(pwd)
 
-export CHERI=$HOME/cheri/output/sdk
-export LD_LIBRARY_PATH=$CHERI/lib
-export CC=$CHERI/bin/clang 
-export LLVM_EXTRACT=$CHERI/bin/llvm-extract
-export AR=$CHERI/bin/llvm-ar 
-export RANLIB=$CHERI/bin/llvm-ranlib
-export LLVM_LINK=$CHERI/bin/llvm-link
-export PYTHONPATH=~/build/test-scripts
-export SSHPORT=10021
-export SSH_OPTIONS='-o "StrictHostKeyChecking no"'
-export SCP_OPTIONS='-o "StrictHostKeyChecking no"'
+# Sqlite3 splitting initial proof of concept on Linux (Ubuntu 20.04)
 
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK -j4
+# Build custom llvm-13 with dynamic libraries
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-13.0.0/llvm-project-13.0.0.src.tar.xz
+tar -xf llvm-project-13.0.0.src.tar.xz
+cd llvm-project-13.0.0.src
+mkdir -p build
+cd build
+CORES=`nproc`
+cmake -DLLVM_ENABLE_PROJECTS="clang;llvm;lld;clang-tools-extra" -DLLVM_LINK_LLVM_DYLIB=ON -G "Unix Makefiles" ../llvm/
+cmake --build . --parallel $CORES
+cmake -DCMAKE_INSTALL_PREFIX=/home/buildbot/llvm-13-with-dynlibs -P cmake_install.cmake
+
+CUSTOM_CC=$HOME/llvm-13-with-dynlibs
+LD_LIBRARY_PATH=$CUSTOM_CC/lib
+CC=$CUSTOM_CC/bin/clang 
+AR=$CUSTOM_CC/bin/llvm-ar 
+RANLIB=$CUSTOM_CC/bin/llvm-ranlib
+LLVM_EXTRACT=$CUSTOM_CC/bin/llvm-extract
+LLVM_LINK=$CUSTOM_CC/bin/llvm-link
+LLVM_CONFIG=$CUSTOM_CC/bin/llvm-config
+LLVM_COMPILER_PATH=$CUSTOM_CC/bin
+
+cd $repodir
+# Install gllvm
+go get github.com/SRI-CSL/gllvm/cmd/...
+GCLANG=$HOME/go/bin/gclang
+GET_BC=$HOME/go/bin/get-bc
+
+make CC=$CC CXX=$CUSTOM_CC/bin/clang++ LLVM_CONFIG=$LLVM_CONFIG LLVM_LINK=$LLVM_LINK LLVM_EXTRACT=$LLVM_EXTRACT -j4
+SPLITTER=$repodir/split-llvm-extract
+wget https://www.sqlite.org/src/tarball/sqlite.tar.gz?r=release -O sqlite-latest.tar.gz
+tar -xvf sqlite-latest.tar.gz
+cd sqlite
+mkdir -p build
+cd build
+CC=$GCLANG
+LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH CC=$CC ../configure
+sed -i '/^CFLAGS =/ s/$/ -fPIC/' Makefile
+LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH make -j32
+# Generate test harness first
+LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH make test -j32
+# Sqlite3 binaries to split
+binaries=( "sqlite3" "lemon" "mkkeywordhash" "sqlite3_analyzer" 
+           "sqltclsh" "fuzzcheck" "sqldiff" "dbhash" "srcck1")
+
+for binary in "${binaries[@]}"; do
+   # Extract bitcode from the binary
+   LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH $GET_BC $binary
+   LLVM_EXTRACT=$LLVM_EXTRACT LD_LIBRARY_PATH=$LD_LIBRARY_PATH $SPLITTER $binary.bc -o out-$binary
+   cp $repodir/tests/Makefile-sqlite out-$binary/Makefile
+   cd out-$binary
+   LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH CC=$CC make
+   cd ..
+   mv $binary $binary.original
+   # Symlinking to re-use the original test suite
+   ln -s $(pwd)/out-$binary/joined $binary
+done
+
+# Reuse the tests suite but with split binaries
+LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH CC=$CC make test
+
+# Continue with CHERI: cross compile and split lua
+cd $repodir
+
+CHERI=$HOME/cheri/output/sdk
+LD_LIBRARY_PATH=$CHERI/lib
+CC=$CHERI/bin/clang 
+LLVM_EXTRACT=$CHERI/bin/llvm-extract
+AR=$CHERI/bin/llvm-ar 
+RANLIB=$CHERI/bin/llvm-ranlib
+LLVM_LINK=$CHERI/bin/llvm-link
+LLVM_CONFIG=$CHERI/bin/llvm-config
+PYTHONPATH=~/build/test-scripts
+SSH_OPTIONS='-o "StrictHostKeyChecking no"'
+
+make clean
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$LLVM_CONFIG LLVM_LINK=$LLVM_LINK -j4
 
 cd tests
 	if ! [ -x "$(command -v cargo)" ]; then
@@ -38,13 +105,15 @@ cd tests
 			-y
 		source $HOME/.cargo/env
 	fi
-	cargo test
+	CC=$CC LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT cargo test
 cd .. 
 
 # Test the handling of `extern` variables of type `const * const` when joining
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH test-extern-const-constptr
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
+test-extern-const-constptr
 # Test visibility is correctly set on global variables and functions
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH test-visibility
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
+test-visibility
 
 tmpdir=/tmp/lua-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)/
 
@@ -64,8 +133,9 @@ cd $repodir
 
 # Split `lua`
 rm -rfv $tmpdir
-./split-llvm-extract lua.linked.bc -o out-lua
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT ./split-llvm-extract lua.linked.bc -o out-lua
 
+SSHPORT=10021
 echo "Running tests for 'riscv64' using QEMU..."
 args=(
     --architecture riscv64
@@ -86,4 +156,4 @@ cd out-lua
 	# Re-build it as a set of shared libraries
 	make CC=$CC CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config -j32
 	# Copy the interpreter to the running qemu instance and execute the tests
-	python3 ../tests/run_cheri_tests.py "${args[@]}"
+	PYTHONPATH=$PYTHONPATH SSH_OPTIONS=$SSH_OPTIONS SCP_OPTIONS=$SCP_OPTIONS python3 ../tests/run_cheri_tests.py "${args[@]}"
