@@ -30,7 +30,6 @@ LLVM_CONFIG=$CHERI/bin/llvm-config
 PYTHONPATH=~/build/test-scripts
 SSH_OPTIONS='-o "StrictHostKeyChecking no"'
 
-make clean
 make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-riscv64-purecap.cfg" LLVM_CONFIG=$LLVM_CONFIG LLVM_LINK=$LLVM_LINK -j4
 
 cd tests
