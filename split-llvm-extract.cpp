@@ -232,9 +232,12 @@ int main(int argc, char **argv)
 
 	for (auto &global : loadedModule->globals())
 	{
-		global.setDSOLocal(false);
-		global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
-		global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+		if (!global.hasHiddenVisibility())
+		{
+			global.setDSOLocal(false);
+			global.setLinkage(llvm::GlobalValue::LinkageTypes::ExternalLinkage);
+			global.setVisibility(llvm::GlobalValue::VisibilityTypes::DefaultVisibility);
+		}
 	}
 
 	for (auto &function : loadedModule->functions())
