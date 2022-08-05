@@ -1,13 +1,32 @@
 #!/usr/bin/env bash
 # Buildbot script to check that `split-llvm-extract`:
-#   1. works when applied to `lua` v5.4.0 cross compiling to CHERI.
+#   1. works when applied to `lua` v5.4.2 cross compiling to CHERI.
 
 set -e
 
 ARCH=
 CHERI=
 
-if [ "$1" = "riscv64-purecap" ]; then
+if [ "$1" = "morello-purecap" ]; then
+	ARCH="morello"
+	CHERI=$HOME/cheri/output/"$ARCH"-sdk
+	CONFIG_FLAGS="-target aarch64-unknown-freebsd13 \
+	  --sysroot=${HOME}/cheri/output/rootfs-morello-purecap \
+	  -B${HOME}/cheri/output/morello-sdk/bin \
+	  -mcpu=rainier -march=morello+c64 -mabi=purecap -Xclang -morello-vararg=new -g"
+	SSHPORT=10085
+	args=(
+	--architecture morello-purecap
+	# Qemu System to use
+	--qemu-cmd $HOME/cheri/output/morello-sdk/bin/qemu-system-morello
+	--bios edk2-aarch64-code.fd
+	--disk-image $HOME/cheri/output/cheribsd-morello-purecap.img
+	# Required build-dir in CheriBSD
+	--build-dir .
+	--ssh-port $SSHPORT
+	--ssh-key $HOME/.ssh/id_ed25519.pub
+	)
+elif [ "$1" = "riscv64-purecap" ]; then
 	ARCH="riscv64"
 	CHERI=$HOME/cheri/output/sdk
 	CONFIG_FLAGS="-target riscv64-unknown-freebsd13 \
@@ -30,7 +49,7 @@ if [ "$1" = "riscv64-purecap" ]; then
     --ssh-key $HOME/.ssh/id_ed25519.pub
     )
 else
-	echo "Only riscv64 purecap is supported ATM."
+	echo "Only purecap architectures, i.e. riscv64 and morello, are supported."
 	# Exit gracefully because we do not want the build to fail
 	exit 0
 fi
@@ -98,7 +117,6 @@ cd $tmpdir
 	make bsd CC=$GCLANG LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH GLLVM_OBJCOPY=$GLLVM_OBJCOPY MYCFLAGS="-DLUA_USE_READLINE_DL -D__LP64__=1 -fPIC $CONFIG_FLAGS" MYLDFLAGS="$CONFIG_FLAGS" AR="${AR}" RANLIB=$RANLIB
 	LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH $GET_BC lua
 	cp lua.bc $repodir
-
 cd $repodir
 
 # Split `lua`
