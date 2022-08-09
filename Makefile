@@ -62,16 +62,6 @@ test-visibility: $(wildcard tests/test-visibility/*.c)
 	cd out && $(MAKE)
 	rm -Rf out
 
-test-ext-lu: $(wildcard tests/test-ext-lu/*.c)
-	rm -Rf *.bc
-	rm -Rf out
-	mkdir -p out
-	$(CC) --config cheribsd-morello-purecap.cfg -fPIC -c -emit-llvm $^
-	$(LLVM_LINK) *.bc -o test.bc
-	./split-llvm-extract test.bc -o out
-	cp tests/Makefile out/.
-	cd out && $(MAKE)
-
 test-compile: out
 	$(CC) $(wildcard out/*.bc) -o out/executable
 

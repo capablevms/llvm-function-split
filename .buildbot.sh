@@ -13,7 +13,7 @@ if [ "$1" = "morello-purecap" ]; then
 	CONFIG_FLAGS="-target aarch64-unknown-freebsd13 \
 	  --sysroot=${HOME}/cheri/output/rootfs-morello-purecap \
 	  -B${HOME}/cheri/output/morello-sdk/bin \
-	  -mcpu=rainier -march=morello+c64 -mabi=purecap -Xclang -morello-vararg=new -g"
+	  -mcpu=rainier -march=morello+c64 -mabi=purecap -Xclang -morello-vararg=new"
 	SSHPORT=10085
 	args=(
 	--architecture morello-purecap
