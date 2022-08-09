@@ -32,7 +32,7 @@ from run_tests_common import boot_cheribsd, run_tests_main
 def run_cheri_tests(qemu: boot_cheribsd.QemuCheriBSDInstance, args: argparse.Namespace) -> bool:
     if args.sysroot_dir is not None:
         boot_cheribsd.set_ld_library_path_with_sysroot(qemu)
-    boot_cheribsd.info("Running Lua tests on CHERI riscv64")
+    boot_cheribsd.info(f"Running Lua tests on CHERI {args.architecture}")
 
     return os.system("make copy-lua copy-exec-tests") == 0
 
