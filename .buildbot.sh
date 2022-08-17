@@ -10,10 +10,6 @@ CHERI=
 if [ "$1" = "morello-purecap" ]; then
 	ARCH="morello"
 	CHERI=$HOME/cheri/output/"$ARCH"-sdk
-	CONFIG_FLAGS="-target aarch64-unknown-freebsd13 \
-	  --sysroot=${HOME}/cheri/output/rootfs-morello-purecap \
-	  -B${HOME}/cheri/output/morello-sdk/bin \
-	  -mcpu=rainier -march=morello+c64 -mabi=purecap -Xclang -morello-vararg=new"
 	SSHPORT=10085
 	args=(
 	--architecture morello-purecap
@@ -29,10 +25,6 @@ if [ "$1" = "morello-purecap" ]; then
 elif [ "$1" = "riscv64-purecap" ]; then
 	ARCH="riscv64"
 	CHERI=$HOME/cheri/output/sdk
-	CONFIG_FLAGS="-target riscv64-unknown-freebsd13 \
-	  --sysroot=${HOME}/cheri/output/rootfs-riscv64-purecap \
-	  -B${HOME}/output/sdk/bin -march=rv64imafdcxcheri \
-	  -mabi=l64pc128d -mno-relax"
 	SSHPORT=10021
 	args=(
     --architecture riscv64
@@ -59,6 +51,7 @@ find . -iname "*.c" -o -iname "*.h" -o -iname "*.cpp" -o -iname "*.hpp" | xargs 
 repodir=$(pwd)
 cd $repodir
 
+CONFIG_FLAGS="--config cheribsd-${ARCH}-purecap.cfg"
 LD_LIBRARY_PATH=$CHERI/lib
 CC=$CHERI/bin/clang 
 LLVM_EXTRACT=$CHERI/bin/llvm-extract
@@ -87,13 +80,13 @@ cd tests
 cd .. 
 
 # Test the handling of `extern` variables of type `const * const` when joining
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-${ARCH}-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
 test-extern-const-constptr
 # Test the handling of `extern` variables with internal/hidden attribute
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-${ARCH}-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
 LLVM_DIS=$LLVM_DIS test-extern-internal
 # Test visibility is correctly set on global variables and functions
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="--config cheribsd-${ARCH}-purecap.cfg" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
+make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
 test-visibility
 
 tmpdir=/tmp/lua-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)/
