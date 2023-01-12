@@ -11,7 +11,7 @@ export
 all: manual-split find-and-split-static split-llvm-extract
 
 manual-split find-and-split-static split-llvm-extract: %: %.cpp
-	$(CXX) -glldb $(shell $(LLVM_CONFIG) --link-shared --cxxflags --ldflags --system-libs --libs) -std=c++17 $< -o $@
+	$(CXX) -glldb $(shell $(LLVM_CONFIG) --cxxflags --ldflags --system-libs --libs) -std=c++17 $< -o $@
 
 test-included: tests/test-mover-included.c
 	$(CC) -c -emit-llvm $< -o test.bc

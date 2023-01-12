@@ -338,7 +338,7 @@ int main(int argc, char **argv)
 	}
 
 	/**
-	 * This is the forth and final stage.
+	 * This is the fourth and final stage.
 	 *
 	 * All of the functions are iterated and commands for splitting
 	 * them are then created and executed.
