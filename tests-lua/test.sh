@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 export LUA=../../lua.shared
 
@@ -6,7 +6,7 @@ rc="0"
 
 for folder in */
 do
-	if [ -f "$folder/out" ] 
+	if [ -f "$folder/out" ]
 	then
 		cd $folder
 		make -f Makefile test;
@@ -16,7 +16,7 @@ do
 			echo "error $folder";
 			echo $difference;
 			rc="1"
-		fi	
+		fi
 		rm out.diff
 		cd ..;
 	else
