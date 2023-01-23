@@ -32,5 +32,4 @@
 *.app
 
 # Output folders
-out-*
-!out-lua/Makefile
+target

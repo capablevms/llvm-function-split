@@ -5,6 +5,6 @@
 set -eu pipefail
 
 echo "Running tests for 'morello-purecap' using QEMU..."
-./run_tests.sh morello-purecap
+./tests/run_tests.sh morello-purecap
 echo "Running tests for 'riscv64-purecap' using QEMU."
-./run_tests.sh riscv64-purecap
+./tests/run_tests.sh riscv64-purecap

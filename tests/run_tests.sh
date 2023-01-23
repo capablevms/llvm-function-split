@@ -2,7 +2,7 @@
 # Buildbot script to check that `split-llvm-extract`:
 #   1. works when applied to `lua` v5.4.2 cross compiling to CHERI.
 
-set -eu pipefail
+set -eu
 
 ARCH=
 CHERI=
@@ -62,6 +62,17 @@ LLVM_DIS=$CHERI/bin/llvm-dis
 LLVM_AS=$CHERI/bin/llvm-as
 SSH_OPTIONS='-o "StrictHostKeyChecking no"'
 
+build_test_deps() {
+	# Build the splitter
+	make CC=$CC CXX=$CXX CFLAGS="${CONFIG_FLAGS}" LLVM_CONFIG=$LLVM_CONFIG LLVM_LINK=$LLVM_LINK -j$(nproc)
+	install_gllvm
+	build_lua
+	# Split `lua`
+	LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT ./split-llvm-extract lua.bc -o tests/lua
+	rm temp.bc
+	rm lua.bc
+}
+
 install_gllvm() {
 	go get github.com/capablevms/gllvm/cmd/...
 	GCLANG=$HOME/go/bin/gclang
@@ -82,6 +93,19 @@ run_cargo_test() {
 		source $HOME/.cargo/env
 	fi
 	CC=$CC LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT cargo test
+	popd
+}
+
+build_lua_tests() {
+	pushd tests/lua
+	make CC=$CC CFLAGS="-DLUA_USE_READLINE_DL -D__LP64__=1 $CONFIG_FLAGS" LDFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$LLVM_CONFIG
+	popd
+}
+
+run_cheri_tests() {
+	pushd tests
+	# Copy the interpreter to the running qemu instance and execute the tests
+	SSHPORT=$SSHPORT SSH_OPTIONS=$SSH_OPTIONS python3 ./run_cheri_tests.py "${args[@]}"
 	popd
 }
 
@@ -116,6 +140,8 @@ run_tests() {
 		LLVM_EXTRACT=$LLVM_EXTRACT \
 
 	run_cargo_test
+	build_lua_tests
+	run_cheri_tests
 }
 
 build_lua() {
@@ -145,21 +171,5 @@ build_lua() {
 	rm -rfv $tmpdir
 }
 
-# Build the splitter
-make CC=$CC CXX=$CXX CFLAGS="${CONFIG_FLAGS}" LLVM_CONFIG=$LLVM_CONFIG LLVM_LINK=$LLVM_LINK -j$(nproc)
-
+build_test_deps
 run_tests
-install_gllvm
-build_lua
-
-# Split `lua`
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT ./split-llvm-extract lua.bc -o tests/lua
-rm temp.bc
-rm lua.bc
-
-# Run the lua tests
-cd tests/lua
-make CC=$CC CFLAGS="-DLUA_USE_READLINE_DL -D__LP64__=1 $CONFIG_FLAGS" LDFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$LLVM_CONFIG
-# Copy the interpreter to the running qemu instance and execute the tests
-SSHPORT=$SSHPORT SSH_OPTIONS=$SSH_OPTIONS python3 ./run_cheri_tests.py "${args[@]}"
-make clean
