@@ -49,7 +49,6 @@ fi
 find . -iname "*.c" -o -iname "*.h" -o -iname "*.cpp" -o -iname "*.hpp" | xargs $CHERI/bin/clang-format --dry-run -Werror
 
 repodir=$(pwd)
-cd $repodir
 
 CONFIG_FLAGS="--config cheribsd-${ARCH}-purecap.cfg"
 LD_LIBRARY_PATH=$CHERI/lib
