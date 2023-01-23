@@ -2,7 +2,7 @@
 # Buildbot script to check that `split-llvm-extract`:
 #   1. works when applied to `lua` v5.4.2 cross compiling to CHERI.
 
-set -eou pipefail
+set -eu pipefail
 
 echo "Running tests for 'morello-purecap' using QEMU..."
 ./run_tests.sh morello-purecap
