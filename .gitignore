@@ -33,3 +33,6 @@
 
 # Output folders
 target
+
+# LLVM
+*.bc
