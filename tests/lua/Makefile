@@ -18,8 +18,8 @@ lib%.so: %.bc
 
 copy-lua:
 	ssh $(SSH_OPTIONS) -p $(SSHPORT) $(USER)@$(RUNHOST) "mkdir -p $(RUNDIR)/lua"
-	scp $(SCP_OPTIONS) -P $(SSHPORT) lua.shared *.so $(USER)@$(RUNHOST):$(RUNDIR)/lua/.
+	scp $(SCP_OPTIONS) -P $(SSHPORT) lua.shared *.so $(USER)@$(RUNHOST):$(RUNDIR)/lua/
 
 copy-exec-tests:
-	scp $(SCP_OPTIONS) -P $(SSHPORT) -r ../tests-lua $(USER)@$(RUNHOST):$(RUNDIR)/lua/.
-	ssh $(SSH_OPTIONS) -p $(SSHPORT) $(USER)@$(RUNHOST) "cd $(RUNDIR)/lua/tests-lua; sh test.sh"
+	scp $(SCP_OPTIONS) -P $(SSHPORT) -r ../lua $(USER)@$(RUNHOST):$(RUNDIR)/lua/
+	ssh $(SSH_OPTIONS) -p $(SSHPORT) $(USER)@$(RUNHOST) "cd $(RUNDIR)/lua/lua/ && sh test.sh"
