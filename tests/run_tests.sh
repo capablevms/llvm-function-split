@@ -2,7 +2,7 @@
 # Buildbot script to check that `split-llvm-extract`:
 #   1. works when applied to `lua` v5.4.2 cross compiling to CHERI.
 
-set -e
+set -eu
 
 ARCH=
 CHERI=
@@ -48,12 +48,11 @@ fi
 
 find . -iname "*.c" -o -iname "*.h" -o -iname "*.cpp" -o -iname "*.hpp" | xargs $CHERI/bin/clang-format --dry-run -Werror
 
-repodir=$(pwd)
-cd $repodir
-
+REPODIR=$(pwd)
 CONFIG_FLAGS="--config cheribsd-${ARCH}-purecap.cfg"
 LD_LIBRARY_PATH=$CHERI/lib
 CC=$CHERI/bin/clang
+CXX=$CHERI/bin/clang++
 LLVM_EXTRACT=$CHERI/bin/llvm-extract
 AR=$CHERI/bin/llvm-ar
 RANLIB=$CHERI/bin/llvm-ranlib
@@ -63,9 +62,27 @@ LLVM_DIS=$CHERI/bin/llvm-dis
 LLVM_AS=$CHERI/bin/llvm-as
 SSH_OPTIONS='-o "StrictHostKeyChecking no"'
 
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="${CONFIG_FLAGS}" LLVM_CONFIG=$LLVM_CONFIG LLVM_LINK=$LLVM_LINK -j4
+build_test_deps() {
+	# Build the splitter
+	make CC=$CC CXX=$CXX CFLAGS="${CONFIG_FLAGS}" LLVM_CONFIG=$LLVM_CONFIG LLVM_LINK=$LLVM_LINK -j$(nproc)
+	install_gllvm
+	build_lua
+	# Split `lua`
+	LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT ./split-llvm-extract lua.bc -o tests/lua
+	rm temp.bc
+	rm lua.bc
+}
 
-cd tests
+install_gllvm() {
+	go get github.com/capablevms/gllvm/cmd/...
+	GCLANG=$HOME/go/bin/gclang
+	GET_BC=$HOME/go/bin/get-bc
+	LLVM_COMPILER_PATH=$CHERI/bin
+	GLLVM_OBJCOPY=$LLVM_COMPILER_PATH/objcopy
+}
+
+run_cargo_test() {
+	pushd tests
 	if ! [ -x "$(command -v cargo)" ]; then
 		curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh
 		sh rustup.sh --default-host x86_64-unknown-linux-gnu \
@@ -76,49 +93,83 @@ cd tests
 		source $HOME/.cargo/env
 	fi
 	CC=$CC LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT cargo test
-cd ..
+	popd
+}
 
-# Test the handling of `extern` variables of type `const * const` when joining
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
-test-extern-const-constptr
-# Test the handling of `extern` variables with internal/hidden attribute
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
-LLVM_DIS=$LLVM_DIS test-extern-internal
-# Test visibility is correctly set on global variables and functions
-make CC=$CC CXX=$CHERI/bin/clang++ CFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$CHERI/bin/llvm-config LLVM_LINK=$LLVM_LINK LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT \
-test-visibility
+build_lua_tests() {
+	pushd tests/lua
+	make CC=$CC CFLAGS="-DLUA_USE_READLINE_DL -D__LP64__=1 $CONFIG_FLAGS" LDFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$LLVM_CONFIG
+	popd
+}
 
-tmpdir=/tmp/lua-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)/
+run_cheri_tests() {
+	pushd tests
+	# Copy the interpreter to the running qemu instance and execute the tests
+	SSHPORT=$SSHPORT SSH_OPTIONS=$SSH_OPTIONS python3 ./run_cheri_tests.py "${args[@]}"
+	popd
+}
 
-# Install gllvm
-go get github.com/capablevms/gllvm/cmd/...
-GCLANG=$HOME/go/bin/gclang
-GET_BC=$HOME/go/bin/get-bc
-LLVM_COMPILER_PATH=$CHERI/bin
-GLLVM_OBJCOPY=$LLVM_COMPILER_PATH/objcopy
+run_tests() {
+	# Test the handling of `extern` variables of type `const * const` when joining
+	make test-extern-const-constptr \
+		CC=$CC \
+		CXX=$CXX \
+		CFLAGS="$CONFIG_FLAGS" \
+		LLVM_CONFIG=$LLVM_CONFIG \
+		LLVM_LINK=$LLVM_LINK \
+		LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
+		LLVM_EXTRACT=$LLVM_EXTRACT \
+	# Test the handling of `extern` variables with internal/hidden attribute
+	make test-extern-internal \
+		CC=$CC \
+		CXX=$CXX \
+		CFLAGS="$CONFIG_FLAGS" \
+		LLVM_CONFIG=$LLVM_CONFIG \
+		LLVM_LINK=$LLVM_LINK \
+		LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
+		LLVM_EXTRACT=$LLVM_EXTRACT \
+		LLVM_DIS=$LLVM_DIS \
+	# Test visibility is correctly set on global variables and functions
+	make test-visibility \
+		CC=$CC \
+		CXX=$CXX \
+		CFLAGS="$CONFIG_FLAGS" \
+		LLVM_CONFIG=$LLVM_CONFIG \
+		LLVM_LINK=$LLVM_LINK \
+		LD_LIBRARY_PATH=$LD_LIBRARY_PATH \
+		LLVM_EXTRACT=$LLVM_EXTRACT \
 
-mkdir -p $tmpdir
-cd $tmpdir
+	run_cargo_test
+	build_lua_tests
+	run_cheri_tests
+}
+
+build_lua() {
+	tmpdir=/tmp/lua-$(tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w 10 | head -n 1)/
+
+	mkdir -p $tmpdir
 	curl -O https://www.lua.org/ftp/lua-5.4.2.tar.gz
-	tar -xvf lua-5.4.2.tar.gz
-	cd lua-5.4.2/src
+	tar -xvf lua-5.4.2.tar.gz -C $tmpdir
+	pushd $tmpdir/lua-5.4.2/src
 	wget https://raw.githubusercontent.com/CTSRD-CHERI/cheribsd-ports/main/lang/lua54/files/extra-patch-libedit-dl
 	patch lua.c extra-patch-libedit-dl
 	wget https://raw.githubusercontent.com/CTSRD-CHERI/cheribsd-ports/main/lang/lua54/files/patch-src_Makefile
 	patch Makefile patch-src_Makefile
-	make bsd CC=$GCLANG LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH GLLVM_OBJCOPY=$GLLVM_OBJCOPY MYCFLAGS="-DLUA_USE_READLINE_DL -D__LP64__=1 -fPIC $CONFIG_FLAGS" MYLDFLAGS="$CONFIG_FLAGS" AR="${AR}" RANLIB=$RANLIB
+
+	make bsd \
+		CC=$GCLANG \
+		LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH \
+		GLLVM_OBJCOPY=$GLLVM_OBJCOPY \
+		MYCFLAGS="-DLUA_USE_READLINE_DL -D__LP64__=1 -fPIC $CONFIG_FLAGS" \
+		MYLDFLAGS="$CONFIG_FLAGS" \
+		AR="$AR" \
+		RANLIB=$RANLIB \
+
 	LLVM_COMPILER_PATH=$LLVM_COMPILER_PATH $GET_BC lua
-	cp lua.bc $repodir
-cd $repodir
+	cp lua.bc $REPODIR
+	popd
+	rm -rfv $tmpdir
+}
 
-# Split `lua`
-rm -rfv $tmpdir
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH LLVM_EXTRACT=$LLVM_EXTRACT ./split-llvm-extract lua.bc -o out-lua
-rm temp.bc
-rm lua.bc
-
-cd out-lua
-	make CC=$CC CFLAGS="-DLUA_USE_READLINE_DL -D__LP64__=1 $CONFIG_FLAGS" LDFLAGS="$CONFIG_FLAGS" LLVM_CONFIG=$CHERI/bin/llvm-config
-	# Copy the interpreter to the running qemu instance and execute the tests
-	SSHPORT=$SSHPORT SSH_OPTIONS=$SSH_OPTIONS python3 ../tests/run_cheri_tests.py "${args[@]}"
-	make clean
+build_test_deps
+run_tests

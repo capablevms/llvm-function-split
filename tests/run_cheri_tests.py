@@ -34,7 +34,7 @@ def run_cheri_tests(qemu: boot_cheribsd.QemuCheriBSDInstance, args: argparse.Nam
         boot_cheribsd.set_ld_library_path_with_sysroot(qemu)
     boot_cheribsd.info(f"Running Lua tests on CHERI {args.architecture}")
 
-    return os.system("make copy-lua copy-exec-tests") == 0
+    return os.system("cd lua && make copy-lua copy-exec-tests") == 0
 
 
 if __name__ == '__main__':
